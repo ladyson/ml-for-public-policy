@@ -39,8 +39,8 @@ def fill_na_median(df, cols_to_fill=False, conditional_mean = False, group_col=N
 # (Logistic Regression for example)
 
 def log_reg(df, features, outcome_var):
-    X = data[features]
-    y = data[outcome_var]
+    X = df[features]
+    y = df[outcome_var]
     lgr = LogisticRegression()
     scores = cross_val_score(lgr, X, y, cv = 10)
     print(scores)
