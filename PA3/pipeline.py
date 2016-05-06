@@ -167,9 +167,11 @@ def binarize(df, col):
 
 # Fit and evaluate models
 
+
 def define_clfs_params():
     '''
     Returns dictionaries of classifiers and respective parameters to try
+    Grid courtesy of https://github.com/rayidghani/magicloops
     '''
 
     clfs = {'RF': RandomForestClassifier(n_estimators=50, n_jobs=-1),
