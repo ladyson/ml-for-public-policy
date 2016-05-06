@@ -166,7 +166,7 @@ def binarize(df, col):
     return df
 
 # Fit and evaluate models
-
+# Grid credit to https://github.com/rayidghani/magicloops
 
 def define_clfs_params():
     '''
