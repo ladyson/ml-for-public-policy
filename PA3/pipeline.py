@@ -43,7 +43,7 @@ def explore_data(df):
    
     print('### Correlations ###')
     for col in df.corr():
-        print(col)
+        print("### "+col+" ###")
         print(df.corr()[col])
         print()
 
@@ -59,13 +59,22 @@ def make_hist(df, col, num_bins=10):
     plt.title(col)
     plt.xlabel("Value")
     plt.ylabel("Frequency")
-    filename = str(col) + '_hist'
+    filename = 'imgs/'+str(col) + '_hist'
     plt.savefig(filename)
     plt.close()
 
 # 3. Pre-Process Data: Fill in misssing values
 
 def split_train_test(df, features, outcome, test_size):
+    '''
+    Splits dataframe into test/train sets
+    Inputs:
+    features: list of feature column names as strings
+    outcome: outcome column name as a string
+    test size: float between 0 and 1
+
+    returns: four dataframes
+    '''
     X = df[features]
     y = df[outcome]
     X_train, X_test, y_train, y_test = cross_validation.train_test_split(X, y, test_size=test_size)
@@ -73,10 +82,8 @@ def split_train_test(df, features, outcome, test_size):
 
 def fill_train_na_mean(df, cols_to_fill=False):
     '''
-    Fills missing values with mean or class conditional mean
+    Fills missing values of training set with mean
     cols_to_fill: list of columns to impute values for. If none specified, fill all.
-    conditional_mean: Boolean. If False, fills with unconditional mean
-    group_col: Column to condition on. Required if conditional_mean is True
 
     Returns:
         vals: dictionary mapping transformed columns to the value used to fill them
@@ -94,14 +101,43 @@ def fill_train_na_mean(df, cols_to_fill=False):
 
 
 def fill_test_na_mean(df, vals):
-    '''fills test values with training means
+    '''
+    Fills null values in test dataset with training set means
     '''
     for col in vals.keys():
         df[col].fillna(vals[col], inplace=True)
 
 
+
+
 # 4. Generate Features: Write a sample function that can discretize a continuous variable and 
 # one function that can take a categorical variable and create binary variables from it.
+
+def transform_squared(df, col, features):
+    '''
+    Creates a new feature by squaring another column
+    '''
+
+    new_name = str(col) + '_sq'
+    df[new_name] = df[col]**2
+    if new_name not in features:
+        features.append(new_name)
+
+
+
+def transform_log(df, col, features, amt_to_add=0):
+    '''
+    Creates a new feature by squaring another column
+    If some values are zero, specify a small amount to amt_to_add
+    to avoid taking log of zero
+    '''
+    new_name = str(col) + '_log'
+    if amt_to_add != 0:
+        df['temp'] = df[col]+amt_to_add
+    df[new_name] = np.log(df['temp'])
+    df.drop('temp', axis=1, inplace=True)
+    if new_name not in features:
+        features.append(new_name)
 
 def discretize(df, col, bins, labels):
     '''
@@ -129,7 +165,12 @@ def binarize(df, col):
     df = df.join(dummies)
     return df
 
+# Fit and evaluate models
+
 def define_clfs_params():
+    '''
+    Returns dictionaries of classifiers and respective parameters to try
+    '''
 
     clfs = {'RF': RandomForestClassifier(n_estimators=50, n_jobs=-1),
         'ET': ExtraTreesClassifier(n_estimators=10, n_jobs=-1, criterion='entropy'),
@@ -140,7 +181,8 @@ def define_clfs_params():
         'NB': GaussianNB(),
         'DT': DecisionTreeClassifier(),
         'SGD': SGDClassifier(loss="hinge", penalty="l2"),
-        'KNN': KNeighborsClassifier(n_neighbors=3) 
+        'KNN': KNeighborsClassifier(n_neighbors=3)
+        # 'SVML': svm.LinearSVC()
             }
 
     grid = { 
@@ -154,7 +196,8 @@ def define_clfs_params():
     'GB': {'n_estimators': [1,10,100,1000,10000], 'learning_rate' : [0.001,0.01,0.05,0.1,0.5],'subsample' : [0.1,0.5,1.0], 'max_depth': [1,3,5,10,20,50,100]},
     'NB' : {},
     'DT': {'criterion': ['gini', 'entropy'], 'max_depth': [1,5,10,20,50,100], 'max_features': ['sqrt','log2'],'min_samples_split': [2,5,10]},
-    'SVM' :{'C' :[0.1,1],'kernel':['linear']},
+    # 'SVML': {'C': [.0001, .001, 0.1,1, 10], 'dual': [False]},
+    'SVM' :{'C' :[1],'kernel':['linear']},
     # 'SVM' :{'C' :[0.00001,0.0001,0.001,0.01,0.1,1,10],'kernel':['linear']},
     'KNN' :{'n_neighbors': [1,5,10],'weights': ['uniform','distance'],'algorithm': ['auto','ball_tree','kd_tree']}
     # 'KNN' :{'n_neighbors': [1,5,10,25,50,100],'weights': ['uniform','distance'],'algorithm': ['auto','ball_tree','kd_tree']}
@@ -163,6 +206,22 @@ def define_clfs_params():
     return clfs, grid
 
 def try_models(clfs_to_try, clfs, grid, X_train, y_train, X_test, y_true):
+    '''
+    Fits, tests, and scores models using GridSearchCV
+    Tries every possible permutation of paramaters provided for each model specified
+    and outputs the best variation found for each type of model
+    Inputs:
+        clfs_to_try: list of classifiers to evaluate
+        clfs: dictionary of models
+        grid: dictionary of parameters
+        X_train, y_train, X_test, y_true: dataframes
+    Outputs:
+        results: Dictionary with an entry for each model tried:
+                    - cv: GridSearchCV object containing best fitted model
+                    - metrics including classification score, TPR, FPR etc
+                    - Y_pred, Y_pred_prob: predicted outcomes for X_test set
+                    - Time: seconds to train and predict model
+    '''
     results = {}
     for c in clfs_to_try:
         start_time = time.time()
@@ -192,6 +251,12 @@ def try_models(clfs_to_try, clfs, grid, X_train, y_train, X_test, y_true):
     return results
     
 def print_report(results, clf):
+    '''
+    Prints evaluation report for fitted model
+    inputs:
+        results: dictionary returned by try_models()
+        clf: key name of classifier to score
+    '''
     print('###')
     print(clf)
     print('###')
@@ -211,11 +276,15 @@ def print_report(results, clf):
     plt.show() 
 
 def print_full_report(results):
+    '''
+    Prints evaluation report for all fitted models
+    inputs:
+        results: dictionary returned by try_models()
+    '''
     for clf in results.keys():
         print_report(results, clf)
 
-# 5. Build Classifier: For this assignment, select any classifer you feel comfortable with 
-# (Logistic Regression for example)
+# 5. Generate predictions on held out data
 
 
 def predict(final_df, features, clf):
@@ -224,11 +293,11 @@ def predict(final_df, features, clf):
     inputs:
         test_df: test DataFrame
         features: list of features to use
-        lgr: fitted logistic regression model
+        clf: fitted model
     '''
     X = final_df[features]
     y = clf.predict(X)
-    index_list = list(final_df.index.values)
+    index_list = list(final_df.index)
     y_df = pd.DataFrame(y, index=index_list, columns=['predicted'])
     final = pd.concat([final_df, y_df], axis=1)
     final.to_csv('predictions.csv', header=True)
